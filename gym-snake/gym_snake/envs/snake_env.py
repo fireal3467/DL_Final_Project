@@ -2,6 +2,8 @@ from collections import Counter
 from collections import deque
 import random
 
+import numpy as np
+
 import gym
 from gym import error, spaces, utils
 from gym.envs.classic_control import rendering
@@ -116,8 +118,11 @@ class SnakeEnv(gym.Env):
 
     # TODO: define observation_space
     def __init__(self):
+        self.display_width = 600
+        self.display_height = 600
+
         self.action_space = spaces.Discrete(4)
-        self.observation_space = None
+        self.observation_space = spaces.Box(low=0, high=255, shape=(self.display_width, self.display_height, 3), dtype=np.uint8)
 
         self.width = 40
         self.height = 40
@@ -131,7 +136,7 @@ class SnakeEnv(gym.Env):
         reward = self.game.step(action)
 
         done = reward in [SnakeReward.DEAD, SnakeReward.WON]
-        observation = None
+        observation = self._get_image()
         info = None
 
         return observation, reward, done, info
@@ -142,28 +147,73 @@ class SnakeEnv(gym.Env):
         observation = None
         return observation
 
-    def render(self, mode='human', close=False):
-        width = height = 600
-        width_scaling_factor = width / self.width
-        height_scaling_factor = height / self.height
+    # def render(self, mode='human', close=False):
+    #     width = height = 600
+    #     width_scaling_factor = width / self.width
+    #     height_scaling_factor = height / self.height
 
-        if self.viewer is None:
-            self.viewer = rendering.Viewer(width, height)
+    #     if self.viewer is None:
+    #         self.viewer = rendering.Viewer(width, height)
+
+    #     for x, y in self.game.snake:
+    #         l, r, t, b = x*width_scaling_factor, (x+1)*width_scaling_factor, y*height_scaling_factor, (y+1)*height_scaling_factor
+    #         square = rendering.FilledPolygon([(l,b), (l,t), (r,t), (r,b)])
+    #         square.set_color(0, 0, 0)
+    #         self.viewer.add_onetime(square)
+
+    #     if self.game.dot:
+    #         x, y = self.game.dot
+    #         l, r, t, b = x*width_scaling_factor, (x+1)*width_scaling_factor, y*height_scaling_factor, (y+1)*height_scaling_factor
+    #         square = rendering.FilledPolygon([(l,b), (l,t), (r,t), (r,b)])
+    #         square.set_color(1, 0, 0)
+    #         self.viewer.add_onetime(square)
+
+    #     return self.viewer.render(return_rgb_array=mode=='rgb_array')
+
+
+    def _get_image(self):
+        width_scaling_factor = self.display_width / self.width
+        height_scaling_factor = self.display_height / self.height
+
+        arr = np.ones((self.display_width, self.display_height, 3))
 
         for x, y in self.game.snake:
-            l, r, t, b = x*width_scaling_factor, (x+1)*width_scaling_factor, y*height_scaling_factor, (y+1)*height_scaling_factor
-            square = rendering.FilledPolygon([(l,b), (l,t), (r,t), (r,b)])
-            square.set_color(0, 0, 0)
-            self.viewer.add_onetime(square)
+            lrtb = x*width_scaling_factor, (x+1)*width_scaling_factor, y*height_scaling_factor, (y+1)*height_scaling_factor
+            self._draw_square(arr, lrtb, (0, 0, 0))
 
         if self.game.dot:
             x, y = self.game.dot
-            l, r, t, b = x*width_scaling_factor, (x+1)*width_scaling_factor, y*height_scaling_factor, (y+1)*height_scaling_factor
-            square = rendering.FilledPolygon([(l,b), (l,t), (r,t), (r,b)])
-            square.set_color(1, 0, 0)
-            self.viewer.add_onetime(square)
+            lrtb = x*width_scaling_factor, (x+1)*width_scaling_factor, y*height_scaling_factor, (y+1)*height_scaling_factor
+            self._draw_square(arr, lrtb, (1, 0, 0))
 
-        return self.viewer.render(return_rgb_array=mode=='rgb_array')
+        output = np.array(arr * 255, dtype=np.uint8)
+
+        return output
+
+
+    def _draw_square(self, arr, lrtb, color):
+        l, r, t, b = lrtb
+        border = 1
+        l += border
+        r -= border
+        t += border
+        b -= border
+        color_r,color_g,color_b = color
+        for col in range(int(r - l)):
+            for row in range(int(b - t)):
+                arr[int(l) + col][int(t) + row] = [color_r,color_g,color_b]
+
+
+    def render(self, mode='human'):
+        img = self._get_image()
+        if mode == 'rgb_array':
+            return img
+        elif mode == 'human':
+            from gym.envs.classic_control import rendering
+            if self.viewer is None:
+                self.viewer = rendering.SimpleImageViewer()
+            self.viewer.imshow(img)
+            return self.viewer.isopen
 
     def close(self):
         pass
