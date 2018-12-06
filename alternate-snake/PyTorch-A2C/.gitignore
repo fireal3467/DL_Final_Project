@@ -1,0 +1,6 @@
+__pycache__/
+*.p
+*.txt
+filedump/
+*.sh
+saved_data/
