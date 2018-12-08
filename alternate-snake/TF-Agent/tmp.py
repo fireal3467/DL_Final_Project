@@ -1,7 +1,21 @@
+import tensorflow as tf
+layers = tf.layers
+image = tf.image
+import numpy as np
+from scipy.misc import imsave
+import os
+import argparse
+
+
 class Model:
 
     def generate_pyramid(im):
-        pass 
+        im_256 = tf.image.resize_images(im, tf.constant([256,256]), method=ResizeMethod.BILINEAR)
+        im_128 = tf.image.resize_images(im, tf.constant([128,128]), method=ResizeMethod.BILINEAR)
+        im_64 = tf.image.resize_images(im, tf.constant([64,64]), method=ResizeMethod.BILINEAR)
+        im_32 = tf.image.resize_images(im, tf.constant([32,32]), method=ResizeMethod.BILINEAR)
+
+        return [im_256, im_128, im_64,im_32]
 
 
     def image_encoder(orig_image_128):
@@ -17,7 +31,11 @@ class Model:
         conv_64 = im_encode_convolutions(im_64)
         conv_32 = im_encode_convolutions(im_32)
 
-        # Therefore, the output size of the four channels are 32×64×64, 32×32×32, 32×16×16, and 32×8×8, respectively.  
+        # Therefore, the output size of the four channels are 32×64×64, 32×32×32, 32×16×16, and 32×8×8, respectively.
+        # In order:
+        # [batch_size, 64,64,32], [batch_size, 32, 32,32], [batch_size,16,16,32], [batch_size,8,8,32]  
+        return [conv_256, conv_128, conv_64, conv_32]
+
 
     def im_encode_convolutions(im):
         '''
