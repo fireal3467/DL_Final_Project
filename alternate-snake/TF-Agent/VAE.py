@@ -26,7 +26,7 @@ class Model:
         self.images = inputs
         self.labels = outputs
 
-        self.z = motion_encoder(inputs)
+        self.z = motion_encoder(inputs, difference_image)
         self.kernels = kernel_decoder(z)
 
     def motion_encoder(x, difference_image):
@@ -37,36 +37,44 @@ class Model:
         
         output: [Batch Size, N_Z]
         '''
-        #TODO: 
-        #add some relu or batch normalizing in between
-        #figure out what they mean by a 5x5 conv
-        
 
         #concating them together to get a [batch_size, 128,128,6] image
         output = tf.concat([x,difference_image], 3)
 
-
-
+        #[batch_size, 128,128,6]
         output = tf.layers.conv2d(x, filters=96,  kernel_size=(5,5))
 
 
+        #[batch_size, 128,128,96]
         output = tf.layers.conv2d(output, filters=96,  kernel_size=(5,5))
         output = tf.layers.batch_normalization(output)
+
+        #[batch_size, 64,64,96]
         output = tf.layers.maxpooling(output, pool_size=[1,2,2,1], strides=[1,2,2,1])
 
-        output = tf.layers.conv2d(output, filters=126,  kernel_size=(5,5))
+        #[batch_size, 64,64,128]
+        output = tf.layers.conv2d(output, filters=128,  kernel_size=(5,5))
         output = tf.layers.batch_normalization(output)
+
+        # [batch_size, 32, 32, 128]
         output = tf.layers.maxpooling(output, pool_size=[1,2,2,1], strides=[1,2,2,1])
 
-        output = tf.layers.conv2d(output, filters=126,  kernel_size=(5,5))
+        # [batch_size, 32, 32, 128]
+        output = tf.layers.conv2d(output, filters=128,  kernel_size=(5,5))
         output = tf.layers.batch_normalization(output)
-        output = tf.layers.maxpooling(output, pool_size=[1,2,2,1], strides=[1,2,2,1])
 
+        # [batch_size, 32,32, 256]
         output = tf.layers.conv2d(output, filters=256,  kernel_size=(5,5))
         output = tf.layers.batch_normalization(output)
+
+        # [batch_size, 16,16, 256]
+        output = tf.layers.maxpooling(output, pool_size=[1,2,2,1], strides=[1,2,2,1])
   
+        # [batch_size, 16,16, 256]
         output = tf.layers.conv2d(output, filters=256,  kernel_size=(5,5))
         output = tf.layers.batch_normalization(output)
+
+        # [batch_size, 5, 5, 256]
         output = tf.layers.maxpooling(output, pool_size=[1,4,4,1], strides=[1,3,3,1])
 
         #what is the shape at the end of this? 256,5,5. The thing paper says it should be 256,5,5?
@@ -86,7 +94,7 @@ class Model:
 
     def kernel_decoder(z):
         '''
-        input: z of size [BATCH_SIZE, 3200]
+        input: z of size [BATCH_SIZE, N_Z]
         '''
 
         output = tf.reshape(z, [BATCH_SIZE,5,5,128])
