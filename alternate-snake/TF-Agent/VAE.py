@@ -30,45 +30,73 @@ class Model:
         self.o_decoded = o_decoder(z)
         self.kernels = decoder(z)
 
-    def encoder(x):
-        '''
-        Input: [batch_size , 128, 128, 3]
 
-        the 128*256 image is a concatentation of the current image and a difference image between it and the next frame
-        
+    def preprocess(im1, im2):
+    	'''
+    	-- The input to the network in training is
+		-- {I1 - mean, I2 - mean}
+		-- And the output to the network in trainig is
+		-- (I2 - I1) * 100
+		--
+		-- Therefore we need the following preproces and
+		-- postprocess step
+    	'''
+
+    	pass
+
+    def encoder(self, x):
+        '''
+        Input: [batch_size , 128, 128, 6] 3 layers for original image RBG, 3 for 'motion image' RGB 
+
+        "The motion encoder takes the current frame as input, in addition to the motion image, 
+        	so that it can learn to model the conditional variational distribution (qθ(·) in Eq. (5))."
         output: [Batch Size, N_Z]
         '''
-        #TODO: 
-        #add some relu or batch normalizing in between
-        #figure out what they mean by a 5x5 conv
         
-        output = tf.layers.conv2d(x, filters=96,  kernel_size=(5,5), strides=(2,2), padding='SAME')
-        output = tf.layers.conv2d(output, filters=96,  kernel_size=(5,5), strides=(2,2), padding='SAME')
+        # Conv 0: [_, 128, 128, 6]
+        output = tf.layers.conv2d(x, filters=96,  kernel_size=(5,5), padding='SAME')
         output = tf.layers.batch_normalization(output)
-        output = tf.nn.leaky_relu(output) 
-        output = tf.layers.conv2d(output, filters=126,  kernel_size=(5,5), strides=(2,2), padding='SAME')
+
+		# Conv 1: [_, 128, 128, 96]
+        output = tf.layers.conv2d(output, filters=96,  kernel_size=(5,5), padding='SAME')
         output = tf.layers.batch_normalization(output)
-        output = tf.nn.leaky_relu(output) 
-        output = tf.layers.conv2d(output, filters=126,  kernel_size=(5,5), strides=(2,2), padding='SAME')
+        output = tf.layers.max_pooling2d(output, pool_size=2, strides=2)
+
+		# Conv 2: [_, 64, 64, 96]
+        output = tf.layers.conv2d(output, filters=126,  kernel_size=(5,5), padding='SAME')
         output = tf.layers.batch_normalization(output)
-        output = tf.nn.leaky_relu(output) 
-        output = tf.layers.conv2d(output, filters=256,  kernel_size=(5,5), strides=(2,2), padding='SAME')
+        output = tf.layers.max_pooling2d(output, pool_size=2, strides=2)
+
+		# Conv 3: [_, 16, 16, 126]
+        output = tf.layers.conv2d(output, filters=126,  kernel_size=(5,5), padding='SAME')
         output = tf.layers.batch_normalization(output)
-        output = tf.nn.leaky_relu(output) 
-        output = tf.layers.conv2d(output, filters=256,  kernel_size=(5,5), strides=(2,2), padding='SAME')
+        output = tf.layers.max_pooling2d(output, pool_size=2, strides=2)
+
+        # Conv 4: [_, 8, 8, 126]
+        output = tf.layers.conv2d(output, filters=256,  kernel_size=(5,5), padding='SAME')
+        output = tf.layers.batch_normalization(output)
+        output = tf.layers.max_pooling2d(output, pool_size=2, strides=2)
+
+		# Conv 5: [_, 4, 4, 256]
+        output = tf.layers.conv2d(output, filters=256,  kernel_size=(5,5), padding='SAME')
+
+        # ...
+
+        # Conv 6: [_, 5, 5, 256]
 
         #what is the shape at the end of this? 256,5,5. The thing paper says it should be 256,5,5?
-        reshaped = tf.reshape(output, [BATCH_SIZE, 6400]) 
+        reshaped = tf.reshape(output, [-1, 6400])
 
         #Split the thing into two [batchsize, 3200] vectors to get a mean and variance vector
-        mean_vector, variance_vector = tf.split(reshaped, [3200, 3200], 1)
+        mean_vector, variance_vector = tf.split(reshaped, num_or_size_splits=2, 1)
+
         mu = tf.layers.dense(mean_vector, N_Z)
         #Q: Why is this log_sigma?
         log_sigma = tf.layers.dense(mean_vector, N_Z)
 
 
         #take a sample from random normal here
-        eps = tf.random_normal(shape=[BATCH_SIZE, N_Z], mean =0., std=1.)
+        eps = tf.random_normal(shape=[-1, N_Z], mean =0., std=1.)
 
         return mu + tf.exp(log_sigma/2) * eps
 
@@ -85,21 +113,25 @@ class Model:
 
         #TODO: Figure out what this function needs to return
 
-    def o_decoder(z):
+
+    def image_encoder(im):
         '''
-        input:: z of size [BATCH_SIZE, 3200]
+        An image encoder, which consists of convolutional layers extracting segments from the input image I
+        Our image encoder (Fig. 3c) operates on four different scaled versions of the input image I:
+            (256×256, 128×128, 64×64, and 32×32)
+        '''
+        im_256, im_128, im_64, im_32 = generate_pyramid(im)
+
+    def cross_convolution(x):
+        '''
+        a cross convolutional layer, which takes the output of the image encoder and the kernel decoder,
+        and convolves the image segments with motion kernels
         '''
 
-        output = tf.reshape(z, [BATCH_SIZE, 5,5, 128])
-        #TODO - figure out if we need a normal decoder.
+    def motion_decoder(x):
+        '''
 
-
-
-
-
-
-
-
+        '''
 
 
 # decoder_hidden = Dense(512, activation='relu')
