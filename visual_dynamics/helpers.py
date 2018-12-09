@@ -37,23 +37,21 @@ def conv2d_layer(inputs, filters, kernel_size=(5,5), strides=(1,1), padding='SAM
             activation=activation
         ))
 
-def get_difference_image(cur_im, next_im):
+def get_difference_image(cur_im_batch, next_im_batch):
     '''
-    notes: possibly make this batchsize by batchsize.
     input: 
-    cur_im = the current image of size [128,128,3]
-    next_im = the next image of size [128,128,3]
+    cur_im = the current image of size [_, 128,128,3]
+    next_im = the next image of size [_, 128,128,3]
 
     return:
-    a difference image of size [128,128,3]
+    a difference image of size [_, 128,128,3]
     '''
     # maybe reference the original image preprocessing code:
     #   https://github.com/tfxue/visual-dynamics/blob/master/src/utilfunc.lua 
 
-    output = tf.subtract(next_im, cur_im)
+    return tf.subtract(next_im_batch, cur_im_batch)
     #normalization:
     #output = tf.add(tf.div(output,2), 127)
-    return output
    
 
 '''
