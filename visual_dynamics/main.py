@@ -8,7 +8,7 @@ import png
 
 BATCH_SIZE = 4
 LATENT_SIZE = 3200
-NUM_EPOCHS = 10 #TODO: figure this out
+NUM_EPOCHS = 60
 
 #------------------------------------------------------------------------------------------------------
 #taken from cs1470 hw8
@@ -68,7 +68,7 @@ print("Model successfully initialized!")
 sess = tf.Session()
 sess.run(tf.global_variables_initializer())
 
-# saver = tf.train.Saver()
+saver = tf.train.Saver()
 
 #------------------------------------------------------------------------------------------------------
 #Set up trainer
@@ -89,7 +89,6 @@ def train():
         iteration = 0
         try:
             while True:
-                #TODO: finish setting this up after data has been figured out.
                 loss, _, kl_loss, recon_loss = sess.run([
                     model.loss_value,
                     model.train_op,
@@ -105,15 +104,17 @@ def train():
                     real_diff, gen_diff = sess.run([model.difference_image, model.generated_image])
                     for i in range(real_diff.shape[0]):
                         out = np.concatenate((real_diff[i,:,:,:], gen_diff[i,:,:,:]))
-                        scipy.misc.imsave(f"img_{iteration}_{i}.jpg", out)
-                    # saver.save(sess, './snake_saved_model')
+                        scipy.misc.imsave(f"/research/xai/starcraft/users/bweissm1/img_{iteration}_{i}.jpg", out)
+                    with open("/research/xai/starcraft/users/bweissm1/log.txt", 'w+') as f:
+                        f.write(f"Epoch: {epoch} Iteration: {iteration}")
+                    saver.save(sess, '/research/xai/starcraft/users/bweissm1/saved_model')
                 iteration += 1
         except tf.errors.OutOfRangeError:
             # Triggered when the iterator runs out of data
             pass
 
         # Save at the end of the epoch, too
-        # saver.save(sess, './snake_saved_model')
+        saver.save(sess, '/research/xai/starcraft/users/bweissm1/saved_model')
 
 #------------------------------------------------------------------------------------------------------
 #Run everything

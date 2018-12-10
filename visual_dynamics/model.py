@@ -178,7 +178,7 @@ class Model:
             𝐷𝐾𝐿(𝑞𝜙(𝑧|𝑣𝑠𝑦𝑛,𝐼)||𝑁(𝟎,𝐈)) + 𝜆 ⋅ ||𝑣𝑠𝑦𝑛 − 𝑣𝑔||
         '''
 
-        lambda_term = 1.0 # Hyperparameter?
+        lambda_term = 1E-5 # Hyperparameter?
         log_squared_sigma = 2 * self.log_sigma
 
         # reduce along the first
