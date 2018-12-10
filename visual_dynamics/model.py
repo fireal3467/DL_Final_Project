@@ -182,10 +182,10 @@ class Model:
         log_squared_sigma = 2 * self.log_sigma
 
         # reduce along the first 
-        kl_divergence = 0.5 * tf.reduce_sum(tf.square(self.mu) + tf.exp(log_squared_sigma) - log_squared_sigma - 1.0)
-        reconstruction_loss = tf.reduce_mean(tf.squared_difference(self.generated_image, self.target_image))
+        self.kl_divergence = 0.5 * tf.reduce_sum(tf.square(self.mu) + tf.exp(log_squared_sigma) - log_squared_sigma - 1.0)
+        self.reconstruction_loss = tf.reduce_sum(tf.squared_difference(self.generated_image, self.target_image))
 
-        return kl_divergence + lambda_term * reconstruction_loss 
+        return self.kl_divergence + lambda_term * self.reconstruction_loss 
 
     def optimizer(self):
         opt = tf.train.AdamOptimizer(learning_rate=self.learning_rate)

@@ -13,3 +13,5 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+*_saved_model.*
+checkpoint

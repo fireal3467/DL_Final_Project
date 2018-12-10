@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import os
 from model import Model
+import scipy.misc
 
 import png
 
@@ -90,11 +91,21 @@ def train():
         try:
             while True:
                 #TODO: finish setting this up after data has been figured out. 
-                loss, _, generated_image = sess.run([model.loss_value, model.train_op, model.generated_image])
+                loss, _, kl_loss, recon_loss, generated_image = sess.run([
+                    model.loss_value, 
+                    model.train_op, 
+                    model.kl_divergence, 
+                    model.reconstruction_loss,
+                    model.generated_image
+                ])
+
+                print("Iteration finished! Saving images")
+                for i in range(generated_image.shape[0]):
+                    scipy.misc.imsave(f"img_{iteration}_{i}.jpg", generated_image[i, :, :, :])
 
                 # Print losses
                 if iteration % 1  == 0:
-                    print('Iteration %d: loss = %g' % (iteration, loss))
+                    print('Iteration %d: loss = %g \t kl_loss = %g \t recon_loss = %g' % (iteration, loss, kl_loss, recon_loss))
                 if iteration % 100 == 0:
                     saver.save(sess, './snake_saved_model')
                 iteration += 1
