@@ -11,7 +11,7 @@ LATENT_SIZE = 3200
 NUM_EPOCHS = 60
 
 
-output_directory = "/research/xai/starcraft/users/bweissm1/cur"
+output_directory = "/research/xai/starcraft/users/bweissm1/cur/"
 # output_directory = os.path.expanduser("~/Desktop/model_out/")
 image_directory = "../3Shapes2_large/"
 print_every = 20
