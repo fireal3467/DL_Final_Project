@@ -10,7 +10,7 @@ class Model:
 
         self.difference_image = get_difference_image(cur_im_batch, next_im_batch)
 
-        self.learning_rate = 0.001
+        self.learning_rate = 0.0001
         self.latent_size = latent_size
         self.batch_size = self.orig_image_128.get_shape().as_list()[0]
 
@@ -27,10 +27,10 @@ class Model:
 
     def motion_encoder(self):
         '''
-        Input: 
+        Input:
         x - current image with size [batch_size , 128, 128, 3]
         difference_image - the difference image between the current image and the next image with size [batch_size, 128,128,3]
-        
+
         output: [Batch Size, N_Z]
         '''
 
@@ -42,26 +42,26 @@ class Model:
         output = conv2d_layer(output, filters=96)
         output = conv2d_layer(output, filters=96)
         output = tf.layers.max_pooling2d(output, pool_size=2, strides=2) # QUESTION: should we use padding: same?
-        
+
         #[batch_size, 64,64,96]
 
         output = conv2d_layer(output, filters=128)
         output = tf.layers.max_pooling2d(output, pool_size=2, strides=2)
-        
+
         # [batch_size, 32, 32, 128]
 
         output = conv2d_layer(output, filters=128)
         output = conv2d_layer(output, filters=256)
         output = tf.layers.max_pooling2d(output, pool_size=2, strides=2)
-  
+
         # [batch_size, 16,16, 256]
 
         output = conv2d_layer(output, filters=256)
         output = tf.layers.max_pooling2d(output, pool_size=4, strides=3)
-        
+
         # [batch_size, 5, 5, 256]
 
-        reshaped = tf.reshape(output, [-1, 6400]) 
+        reshaped = tf.reshape(output, [-1, 6400])
         mean_vector, variance_vector = tf.split(reshaped, [3200, 3200], 1)
 
         # Q: Why is this log_sigma? A: https://www.reddit.com/r/MachineLearning/comments/74dx67/d_why_use_exponential_term_rather_than_log_term/
@@ -106,12 +106,12 @@ class Model:
         im_block_8 = im_encode_convolutions(im_32)
 
         # Therefore, the output size of the four channels are 32×64×64, 32×32×32, 32×16×16, and 32×8×8, respectively.
-        # In order: [batch_size, 64,64,32], [batch_size, 32, 32,32], [batch_size,16,16,32], [batch_size,8,8,32]  
+        # In order: [batch_size, 64,64,32], [batch_size, 32, 32,32], [batch_size,16,16,32], [batch_size,8,8,32]
         return im_block_64, im_block_32, im_block_16, im_block_8
 
     def cross_convolution(self):
         '''
-        A cross convolutional layer takes the output of the image encoder and the kernel decoder, 
+        A cross convolutional layer takes the output of the image encoder and the kernel decoder,
             and convolves the image segments with motion kernels.
         The cross convolutional layer has the same output size as the image encoder.
         '''
@@ -155,8 +155,8 @@ class Model:
 
         im_block_64, im_block_32, im_block_16, im_block_8 = self.cross_conv_output
 
-        # Our motion decoder (Fig. 3e) starts with an up-sampling layer at each scale, 
-        #   making the output of all scales of the cross convolutional layer have a resolution of 64×64. 
+        # Our motion decoder (Fig. 3e) starts with an up-sampling layer at each scale,
+        #   making the output of all scales of the cross convolutional layer have a resolution of 64×64.
         upsampled_64 = tf.image.resize_images(im_block_64, tf.constant([128,128]), method=ResizeMethod.BILINEAR)
         upsampled_32 = tf.image.resize_images(im_block_32, tf.constant([128,128]), method=ResizeMethod.BILINEAR)
         upsampled_16 = tf.image.resize_images(im_block_16, tf.constant([128,128]), method=ResizeMethod.BILINEAR)
@@ -174,21 +174,19 @@ class Model:
 
     def loss(self):
         '''
-        Objective function: 
+        Objective function:
             𝐷𝐾𝐿(𝑞𝜙(𝑧|𝑣𝑠𝑦𝑛,𝐼)||𝑁(𝟎,𝐈)) + 𝜆 ⋅ ||𝑣𝑠𝑦𝑛 − 𝑣𝑔||
         '''
 
         lambda_term = 1.0 # Hyperparameter?
         log_squared_sigma = 2 * self.log_sigma
 
-        # reduce along the first 
+        # reduce along the first
         self.kl_divergence = 0.5 * tf.reduce_sum(tf.square(self.mu) + tf.exp(log_squared_sigma) - log_squared_sigma - 1.0)
-        self.reconstruction_loss = tf.reduce_sum(tf.squared_difference(self.generated_image, self.target_image))
+        self.reconstruction_loss = tf.reduce_sum(tf.squared_difference(self.generated_image, self.difference_image))
 
-        return self.kl_divergence + lambda_term * self.reconstruction_loss 
+        return self.kl_divergence + lambda_term * self.reconstruction_loss
 
     def optimizer(self):
         opt = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
         return opt.minimize(self.loss_value)
-
-

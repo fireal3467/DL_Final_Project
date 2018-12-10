@@ -6,7 +6,7 @@ import scipy.misc
 
 import png
 
-BATCH_SIZE = 8
+BATCH_SIZE = 4
 LATENT_SIZE = 3200
 NUM_EPOCHS = 10 #TODO: figure this out
 
@@ -31,7 +31,7 @@ def load_image_batch(dirname, batch_size=128,
         return image
 
     def load_images_from_id(index):
-        return load_im(index,1), load_im(index,2) 
+        return load_im(index,1), load_im(index,2)
 
     # List filenames
     dataset = tf.data.TextLineDataset(filenames)
@@ -68,8 +68,7 @@ print("Model successfully initialized!")
 sess = tf.Session()
 sess.run(tf.global_variables_initializer())
 
-saver = tf.train.Saver()
-
+# saver = tf.train.Saver()
 
 #------------------------------------------------------------------------------------------------------
 #Set up trainer
@@ -90,34 +89,33 @@ def train():
         iteration = 0
         try:
             while True:
-                #TODO: finish setting this up after data has been figured out. 
-                loss, _, kl_loss, recon_loss, generated_image = sess.run([
-                    model.loss_value, 
-                    model.train_op, 
-                    model.kl_divergence, 
-                    model.reconstruction_loss,
-                    model.generated_image
+                #TODO: finish setting this up after data has been figured out.
+                loss, _, kl_loss, recon_loss = sess.run([
+                    model.loss_value,
+                    model.train_op,
+                    model.kl_divergence,
+                    model.reconstruction_loss
                 ])
 
-                print("Iteration finished! Saving images")
-                for i in range(generated_image.shape[0]):
-                    scipy.misc.imsave(f"img_{iteration}_{i}.jpg", generated_image[i, :, :, :])
-
                 # Print losses
-                if iteration % 1  == 0:
+                if iteration % 100  == 0:
                     print('Iteration %d: loss = %g \t kl_loss = %g \t recon_loss = %g' % (iteration, loss, kl_loss, recon_loss))
-                if iteration % 100 == 0:
-                    saver.save(sess, './snake_saved_model')
+                if iteration % 400 == 0:
+                    print("Iteration finished! Saving images")
+                    real_diff, gen_diff = sess.run([model.difference_image, model.generated_image])
+                    for i in range(real_diff.shape[0]):
+                        out = np.concatenate((real_diff[i,:,:,:], gen_diff[i,:,:,:]))
+                        scipy.misc.imsave(f"img_{iteration}_{i}.jpg", out)
+                    # saver.save(sess, './snake_saved_model')
                 iteration += 1
         except tf.errors.OutOfRangeError:
             # Triggered when the iterator runs out of data
             pass
 
         # Save at the end of the epoch, too
-        saver.save(sess, './snake_saved_model')
+        # saver.save(sess, './snake_saved_model')
 
 #------------------------------------------------------------------------------------------------------
 #Run everything
 
 train()
-
