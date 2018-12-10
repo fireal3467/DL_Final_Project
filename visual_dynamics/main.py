@@ -11,16 +11,17 @@ LATENT_SIZE = 3200
 NUM_EPOCHS = 60
 
 
-output_directory = "/research/xai/starcraft/users/bweissm1/"
+output_directory = "/research/xai/starcraft/users/bweissm1/cur"
 # output_directory = os.path.expanduser("~/Desktop/model_out/")
 image_directory = "../3Shapes2_large/"
 print_every = 20
-save_every = 100
+save_every = 400
+restore_checkpoint = True
 
 #------------------------------------------------------------------------------------------------------
 #taken from cs1470 hw8
 def load_last_checkpoint():
-    saver.restore(sess, tf.train.latest_checkpoint('./'))
+    saver.restore(sess, tf.train.latest_checkpoint(output_directory))
 
 # Sets up tensorflow graph to load images
 # (This is the version using new-style tf.data API)
@@ -141,22 +142,28 @@ def train():
 def test(identifier):
     print("Generating test images...")
 
-    loss, kl_loss, recon_loss, real_diff, gen_diff = sess.run([
+    loss, kl_loss, recon_loss, real_diff, gen_diff, real_cur, real_next = sess.run([
         model.loss_value,
         model.kl_divergence,
         model.reconstruction_loss,
         model.difference_image, 
-        model.generated_image
+        model.generated_image,
+        model.orig_image_128,
+        model.target_image
     ], feed_dict={model.is_training: False})
 
     print("Saving images...")
     print(f"Loss: {loss}\t kl: {kl_loss}\t recon: {recon_loss}")
 
     for i in range(real_diff.shape[0]):
-        out = np.concatenate((real_diff[i,:,:,:], gen_diff[i,:,:,:]))
+        reals = np.concatenate((real_cur[i,:,:,:], real_diff[i,:,:,:], real_next[i,:,:,:]))
+        gens = np.concatenate((real_cur[i,:,:,:], gen_diff[i,:,:,:], real_cur[i,:,:,:] + gen_diff[i,:,:,:]))
+        out = np.concatenate((reals, gens), axis=1)
         scipy.misc.imsave(f"{output_directory}img_{identifier}_{i}.jpg", out)
 
 #------------------------------------------------------------------------------------------------------
 #Run everything
+if restore_checkpoint:
+    load_last_checkpoint()
 
 train()
