@@ -1,7 +1,11 @@
-import tf
+import tensorflow as tf
 import numpy as np
+import os
+from model import Model
 
-BATCH_SIZE = 50
+import png
+
+BATCH_SIZE = 8
 LATENT_SIZE = 3200
 NUM_EPOCHS = 10 #TODO: figure this out
 
@@ -10,43 +14,55 @@ NUM_EPOCHS = 10 #TODO: figure this out
 def load_last_checkpoint():
     saver.restore(sess, tf.train.latest_checkpoint('./'))
 
-
-#TODO: Change this function to load images
+# Sets up tensorflow graph to load images
+# (This is the version using new-style tf.data API)
 def load_image_batch(dirname, batch_size=128,
     shuffle_buffer_size=250000, n_threads=2):
-    '''
-    return: 
-    a dataset of shape [num batches, batch_size, 2, 128,128,3]
 
-    each element in the batch is a tuple of (current image, next image). 
-    '''
+    root_dir = os.path.expanduser(dirname)
+    filenames = [f"{root_dir}train.txt"]
 
-
-    # Function used to load and pre-process image files
-    # (Have to define this ahead of time b/c Python does allow multi-line
-    #    lambdas, *grumble*)
-    def load_and_process_image(filename):
-        # Load image
-        image = tf.image.decode_jpeg(tf.read_file(filename), channels=3)
-        # Convert image to normalized float (0, 1)
+    def load_im(image_id, next_or_cur):
+        filename = tf.strings.join([tf.constant(root_dir), image_id, tf.constant(f"_im{next_or_cur}.png")])
+        image = tf.image.decode_png(tf.read_file(filename), channels=3)
         image = tf.image.convert_image_dtype(image, tf.float32)
-        # Rescale data to range (-1, 1)
-        image = (image - 0.5) * 2
+        image = tf.image.resize_images(image, tf.constant([128,128]))
         return image
 
-    #TODO: figure out what the current Data representation is and how to access / shuffle it. 
+    def load_images_from_id(index):
+        return load_im(index,1), load_im(index,2) 
 
+    # List filenames
+    dataset = tf.data.TextLineDataset(filenames)
+
+    # Shuffle order
+    dataset = dataset.shuffle(buffer_size=shuffle_buffer_size)
+    # Load and process images (in parallel)
+    dataset = dataset.map(map_func=load_images_from_id, num_parallel_calls=n_threads)
+    # Create batch, dropping the final one which has less than batch_size elements
+    dataset = dataset.batch(batch_size, drop_remainder=True)
+    # Prefetch the next batch while the GPU is training
+    dataset = dataset.prefetch(1)
+
+    # Return an iterator over this dataset that we can
+    #    re-initialize for each new epoch
+    return dataset.make_initializable_iterator()
 
 #------------------------------------------------------------------------------------------------------
 #Set up data collection, initialize the model
 
-dataset = load_image_batch(args.img_dir,
+print("Welcome!")
+image_directory = "../3Shapes2_large/"
+dataset_iterator = load_image_batch(image_directory,
     batch_size=BATCH_SIZE)
 
-current_images = tf.placeholder(dtype=tf.uint8, shape=[None, 128, 128, 3])
-next_images = tf.placeholder(dtype=tf.uint8, shape=[None, 128, 128, 3])
+print(f"Dataset successfully defined! Using root directory: {image_directory}")
 
-model = Model(current_images, next_images, BATCH_SIZE, LATENT_SIZE)
+cur_images_batch, next_images_batch = dataset_iterator.get_next()
+
+model = Model(cur_images_batch, next_images_batch, LATENT_SIZE)
+
+print("Model successfully initialized!")
 
 sess = tf.Session()
 sess.run(tf.global_variables_initializer())
@@ -58,23 +74,26 @@ saver = tf.train.Saver()
 #Set up trainer
 
 def train():
+    print("Entering training loop!")
     # Training loop
     for epoch in range(NUM_EPOCHS):
         print('========================== EPOCH %d  ==========================' % epoch)
 
         # Initialize the dataset iterator for this epoch (this shuffles the
         #    data differently every time)
+        print("Attempting to initialize the dataset...")
         sess.run(dataset_iterator.initializer)
+        print("Dataset initialized!")
 
         # Loop over our data until we run out
         iteration = 0
         try:
             while True:
                 #TODO: finish setting this up after data has been figured out. 
-                loss, _ = sess.run([model.loss_value, model.train_op], feed_dict={current_images: , next_images: })
+                loss, _, generated_image = sess.run([model.loss_value, model.train_op, model.generated_image])
 
                 # Print losses
-                if iteration % 10  == 0:
+                if iteration % 1  == 0:
                     print('Iteration %d: loss = %g' % (iteration, loss))
                 if iteration % 100 == 0:
                     saver.save(sess, './snake_saved_model')

@@ -1,16 +1,18 @@
 import tensorflow as tf
-from helpers import conv2d_layer
+ResizeMethod = tf.image.ResizeMethod
+from helpers import *
 
 # NOTE 60k pairs of frames used for training
 class Model:
-    def __init__(self, cur_im_batch, next_im_batch, batch_size, latent_size):
+    def __init__(self, cur_im_batch, next_im_batch, latent_size):
         self.orig_image_128 = cur_im_batch
         self.target_image = next_im_batch
 
         self.difference_image = get_difference_image(cur_im_batch, next_im_batch)
 
+        self.learning_rate = 0.001
         self.latent_size = latent_size
-        self.batch_size = batch_size
+        self.batch_size = self.orig_image_128.get_shape().as_list()[0]
 
         self.mu, self.log_sigma = self.motion_encoder()
         self.z = self.sample()
@@ -80,7 +82,7 @@ class Model:
         input: z of size [BATCH_SIZE, N_Z]
         '''
 
-        num_channels = self.latent_size / 25 # should be 128
+        num_channels = int(self.latent_size / 25) # should be 128
         output = tf.reshape(self.z, [self.batch_size, 5, 5, num_channels])
 
         # size [_, 5, 5, 128]
@@ -105,7 +107,7 @@ class Model:
 
         # Therefore, the output size of the four channels are 32×64×64, 32×32×32, 32×16×16, and 32×8×8, respectively.
         # In order: [batch_size, 64,64,32], [batch_size, 32, 32,32], [batch_size,16,16,32], [batch_size,8,8,32]  
-        return conv_256, conv_128, conv_64, conv_32
+        return im_block_64, im_block_32, im_block_16, im_block_8
 
     def cross_convolution(self):
         '''
@@ -114,16 +116,37 @@ class Model:
         The cross convolutional layer has the same output size as the image encoder.
         '''
 
-        n_channels = self.segmented_images.shape[3] # 32
-        outputs = []
+        def apply_cross_conv_to_block(im_block, kernel_block):
+            n_channels = im_block.shape[3] # 32
+            outputs = []
 
-        for i in range(n_channels):
-            im = self.segmented_images[:,:,:,i]
-            kernel = self.motion_kernels[:,:,:,i]
+            # print("kernel_block", kernel_block.shape)
+            # print("im_block", im_block.shape)
 
-            output.append(tf.nn.conv2d(im, kernel, [1,1,1,1], "SAME"))
+            for batch_idx in range(self.batch_size):
+                this_batch = []
 
-        return tf.stack(output)
+                for channel_idx in range(n_channels):
+                    im_size = im_block.shape[1]
+                    im = tf.reshape(im_block[batch_idx,:,:,channel_idx], [1, im_size, im_size, 1])
+                    kernel = tf.reshape(kernel_block[batch_idx,:,:,channel_idx], [5, 5, 1, 1])
+
+                    single_channel_conv = tf.nn.conv2d(im, kernel, [1,1,1,1], "SAME")
+                    this_batch.append(tf.reshape(single_channel_conv, [im_size, im_size]))
+
+                outputs.append(tf.stack(this_batch, axis=2))
+            return tf.stack(outputs)
+
+        im_block_64, im_block_32, im_block_16, im_block_8 = self.segmented_images
+        k_block_1, k_block_2, k_block_3, k_block_4 = self.motion_kernels
+
+        conv_block_64 = apply_cross_conv_to_block(im_block_64, k_block_1)
+        conv_block_32 = apply_cross_conv_to_block(im_block_32, k_block_2)
+        conv_block_16 = apply_cross_conv_to_block(im_block_16, k_block_3)
+        conv_block_8 = apply_cross_conv_to_block(im_block_8, k_block_4)
+
+        return conv_block_64, conv_block_32, conv_block_16, conv_block_8
+
 
     def motion_decoder(self):
         '''
@@ -142,13 +165,11 @@ class Model:
         # THIS IS INCORRECT ^^ THESE ARE NOW 128x128 not 64x64
 
         combined_blocks = tf.concat([upsampled_64, upsampled_32, upsampled_16, upsampled_8], 3)
-
         # This is then followed by one 9×9 and two 1×1 convolutional and batch normalization layers,
         #     with {128, 128, 3} channels.
-        output = tf.layers.batch_normalization(tf.layers.conv2d(combined_blocks, filters=128, kernel_size=9, activation=tf.nn.relu))
-        output = tf.layers.batch_normalization(tf.layers.conv2d(output, filters=128, kernel_size=1, activation=tf.nn.relu))
-        output = tf.layers.batch_normalization(tf.layers.conv2d(output, filters=3, kernel_size=1, activation=tf.nn.relu))
-
+        output = conv2d_layer(combined_blocks, filters=128, kernel_size=9)
+        output = conv2d_layer(combined_blocks, filters=128, kernel_size=1)
+        output = conv2d_layer(combined_blocks, filters=3, kernel_size=1)
         return output
 
     def loss(self):
@@ -158,10 +179,10 @@ class Model:
         '''
 
         lambda_term = 1.0 # Hyperparameter?
-        log_squared_sigma = 2 * log_sigma
+        log_squared_sigma = 2 * self.log_sigma
 
         # reduce along the first 
-        kl_divergence = 0.5 * tf.sum(tf.square(self.mu) + tf.exp(log_squared_sigma) - log_squared_sigma - 1.0)
+        kl_divergence = 0.5 * tf.reduce_sum(tf.square(self.mu) + tf.exp(log_squared_sigma) - log_squared_sigma - 1.0)
         reconstruction_loss = tf.reduce_mean(tf.squared_difference(self.generated_image, self.target_image))
 
         return kl_divergence + lambda_term * reconstruction_loss 

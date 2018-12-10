@@ -1,4 +1,5 @@
 import tensorflow as tf
+ResizeMethod = tf.image.ResizeMethod
 
 def generate_pyramid(input_im_128):
         im_256 = tf.image.resize_images(input_im_128, tf.constant([256,256]), method=ResizeMethod.BILINEAR)
@@ -14,13 +15,13 @@ def im_encode_convolutions(im):
         two of which are followed by a 2×2 max pooling layer.
     '''
 
-    output = tf.layers.batch_normalization(tf.layers.conv2d(im, filters=64, kernel_size=(5,5), activation=tf.nn.relu))
-    output = tf.layers.batch_normalization(tf.layers.conv2d(output, filters=64, kernel_size=(5,5), activation=tf.nn.relu))
+    output = conv2d_layer(im, filters=64)
+    output = conv2d_layer(im, filters=64)
     output = tf.layers.max_pooling2d(output, pool_size=2, strides=2)
     #[_, s/2, s/4, 64]
 
-    output = tf.layers.batch_normalization(tf.layers.conv2d(output, filters=64, kernel_size=(5,5), activation=tf.nn.relu))
-    output = tf.layers.batch_normalization(tf.layers.conv2d(output, filters=32, kernel_size=(5,5), activation=tf.nn.relu))
+    output = conv2d_layer(im, filters=64)
+    output = conv2d_layer(im, filters=32)
     output = tf.layers.max_pooling2d(output, pool_size=2, strides=2)
     #[_, s/4, s/4, 32]
 
