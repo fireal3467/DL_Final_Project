@@ -1,6 +1,6 @@
 import tensorflow as tf
 ResizeMethod = tf.image.ResizeMethod
-from helpers import *
+# from helpers import *
 
 # NOTE 60k pairs of frames used for training
 class Model:
@@ -8,7 +8,9 @@ class Model:
         self.orig_image_128 = cur_im_batch
         self.target_image = next_im_batch
 
-        self.difference_image = get_difference_image(cur_im_batch, next_im_batch)
+        self.is_training = tf.placeholder(dtype=tf.bool)
+
+        self.difference_image = self.get_difference_image(cur_im_batch, next_im_batch)
 
         self.learning_rate = 0.0001
         self.latent_size = latent_size
@@ -39,24 +41,24 @@ class Model:
 
         #[batch_size, 128,128,6]
 
-        output = conv2d_layer(output, filters=96)
-        output = conv2d_layer(output, filters=96)
-        output = tf.layers.max_pooling2d(output, pool_size=2, strides=2) # QUESTION: should we use padding: same?
+        output = self.conv2d_layer(output, filters=96)
+        output = self.conv2d_layer(output, filters=96)
+        output = tf.layers.max_pooling2d(output, pool_size=2, strides=2)
 
         #[batch_size, 64,64,96]
 
-        output = conv2d_layer(output, filters=128)
+        output = self.conv2d_layer(output, filters=128)
         output = tf.layers.max_pooling2d(output, pool_size=2, strides=2)
 
         # [batch_size, 32, 32, 128]
 
-        output = conv2d_layer(output, filters=128)
-        output = conv2d_layer(output, filters=256)
+        output = self.conv2d_layer(output, filters=128)
+        output = self.conv2d_layer(output, filters=256)
         output = tf.layers.max_pooling2d(output, pool_size=2, strides=2)
 
         # [batch_size, 16,16, 256]
 
-        output = conv2d_layer(output, filters=256)
+        output = self.conv2d_layer(output, filters=256)
         output = tf.layers.max_pooling2d(output, pool_size=4, strides=3)
 
         # [batch_size, 5, 5, 256]
@@ -87,8 +89,8 @@ class Model:
 
         # size [_, 5, 5, 128]
 
-        output = conv2d_layer(output, filters=128)
-        output = conv2d_layer(output, filters=128)
+        output = self.conv2d_layer(output, filters=128)
+        output = self.conv2d_layer(output, filters=128)
 
         return tf.split(output, num_or_size_splits=4, axis=3)
 
@@ -98,12 +100,12 @@ class Model:
         Our image encoder (Fig. 3c) operates on four different scaled versions of the input image I:
             (256×256, 128×128, 64×64, and 32×32)
         '''
-        im_256, im_128, im_64, im_32 = generate_pyramid(self.orig_image_128)
+        im_256, im_128, im_64, im_32 = self.generate_pyramid(self.orig_image_128)
 
-        im_block_64 = im_encode_convolutions(im_256)
-        im_block_32 = im_encode_convolutions(im_128)
-        im_block_16 = im_encode_convolutions(im_64)
-        im_block_8 = im_encode_convolutions(im_32)
+        im_block_64 = self.im_encode_convolutions(im_256)
+        im_block_32 = self.im_encode_convolutions(im_128)
+        im_block_16 = self.im_encode_convolutions(im_64)
+        im_block_8 = self.im_encode_convolutions(im_32)
 
         # Therefore, the output size of the four channels are 32×64×64, 32×32×32, 32×16×16, and 32×8×8, respectively.
         # In order: [batch_size, 64,64,32], [batch_size, 32, 32,32], [batch_size,16,16,32], [batch_size,8,8,32]
@@ -167,9 +169,9 @@ class Model:
         combined_blocks = tf.concat([upsampled_64, upsampled_32, upsampled_16, upsampled_8], 3)
         # This is then followed by one 9×9 and two 1×1 convolutional and batch normalization layers,
         #     with {128, 128, 3} channels.
-        output = conv2d_layer(combined_blocks, filters=128, kernel_size=9)
-        output = conv2d_layer(combined_blocks, filters=128, kernel_size=1)
-        output = conv2d_layer(combined_blocks, filters=3, kernel_size=1)
+        output = self.conv2d_layer(combined_blocks, filters=128, kernel_size=9)
+        output = self.conv2d_layer(combined_blocks, filters=128, kernel_size=1)
+        output = self.conv2d_layer(combined_blocks, filters=3, kernel_size=1)
         return output
 
     def loss(self):
@@ -189,4 +191,60 @@ class Model:
 
     def optimizer(self):
         opt = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
-        return opt.minimize(self.loss_value)
+        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(update_ops):
+            return opt.minimize(self.loss_value)
+
+    def conv2d_layer(self, inputs, filters, kernel_size=(5,5), strides=(1,1), padding='SAME', activation=tf.nn.leaky_relu):
+        return tf.layers.batch_normalization(
+            tf.layers.conv2d(
+                inputs=inputs, 
+                filters=filters, 
+                kernel_size=kernel_size,
+                strides=strides,
+                padding=padding,
+                activation=activation
+            ), training=self.is_training)
+
+    def generate_pyramid(self, input_im_128):
+        im_256 = tf.image.resize_images(input_im_128, tf.constant([256,256]), method=ResizeMethod.BILINEAR)
+        im_128 = tf.image.resize_images(input_im_128, tf.constant([128,128]), method=ResizeMethod.BILINEAR)
+        im_64 = tf.image.resize_images(input_im_128, tf.constant([64,64]), method=ResizeMethod.BILINEAR)
+        im_32 = tf.image.resize_images(input_im_128, tf.constant([32,32]), method=ResizeMethod.BILINEAR)
+
+        return [im_256, im_128, im_64,im_32]
+
+    def im_encode_convolutions(self, im):
+        '''
+        four convolutions (5x5) and batch normalizations channels (64, 64, 64, 32)
+            two of which are followed by a 2×2 max pooling layer.
+        '''
+
+        output = self.conv2d_layer(im, filters=64)
+        output = self.conv2d_layer(im, filters=64)
+        output = tf.layers.max_pooling2d(output, pool_size=2, strides=2)
+        #[_, s/2, s/4, 64]
+
+        output = self.conv2d_layer(im, filters=64)
+        output = self.conv2d_layer(im, filters=32)
+        output = tf.layers.max_pooling2d(output, pool_size=2, strides=2)
+        #[_, s/4, s/4, 32]
+
+        return output
+
+    def get_difference_image(self, cur_im_batch, next_im_batch):
+        '''
+        input: 
+        cur_im = the current image of size [_, 128,128,3]
+        next_im = the next image of size [_, 128,128,3]
+
+        return:
+        a difference image of size [_, 128,128,3]
+        '''
+        # maybe reference the original image preprocessing code:
+        #   https://github.com/tfxue/visual-dynamics/blob/master/src/utilfunc.lua 
+
+        return tf.subtract(next_im_batch, cur_im_batch)
+        #normalization:
+        #output = tf.add(tf.div(output,2), 127)
+       
